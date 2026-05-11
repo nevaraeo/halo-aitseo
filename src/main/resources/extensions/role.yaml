@@ -1,4 +1,7 @@
-# Admin-bindable role for managing AITSEO Connect plugin
+# Admin-bindable role for managing AITSEO Connect plugin settings.
+# (Plugin REST endpoints under /aitseo-connect/api/v1alpha1/** bypass Halo
+# RBAC entirely via path prefix; this role is only used inside Halo admin UI
+# for permission scoping.)
 apiVersion: v1alpha2
 kind: Role
 metadata:
@@ -10,24 +13,6 @@ metadata:
     rbac.authorization.halo.run/display-name: "AITSEO Connect 管理"
     rbac.authorization.halo.run/ui-permissions: |
       ["plugin:aitseo-connect:manage"]
-rules:
-  - apiGroups: ["aitseo.run"]
-    resources: ["*"]
-    verbs: ["*"]
----
-# Public-access role: aggregates into Halo's anonymous role so that requests
-# without Halo session can still hit our /apis/aitseo.run/v1alpha1/** paths.
-# Real auth is done by AitseoController.requireKey via X-Connection-Key header.
-apiVersion: v1alpha2
-kind: Role
-metadata:
-  name: role-template-aitseo-connect-public
-  labels:
-    halo.run/role-template: "true"
-    rbac.authorization.halo.run/aggregate-to-anonymous: "true"
-  annotations:
-    rbac.authorization.halo.run/module: "AITSEO Connect"
-    rbac.authorization.halo.run/display-name: "AITSEO Connect 公开访问"
 rules:
   - apiGroups: ["aitseo.run"]
     resources: ["*"]

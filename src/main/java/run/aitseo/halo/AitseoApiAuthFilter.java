@@ -6,6 +6,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.core.context.SecurityContextImpl;
+import org.springframework.security.web.server.csrf.CsrfWebFilter;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilter;
@@ -14,23 +15,18 @@ import reactor.core.publisher.Mono;
 import run.halo.app.security.BeforeSecurityWebFilter;
 
 /**
- * Inject a fully-authenticated principal with wildcard RBAC authorities for any
- * request to /aitseo-connect/api/v1alpha1/** so that Halo's default
- * SecurityWebFilterChain
- *   (1) does NOT redirect to /login?authentication_required (.authenticated() check), AND
- *   (2) does NOT return 403 Access Denied (.hasAuthority(...) RBAC check).
- *
- * Halo's RBAC AuthorizationManager checks the authentication's authorities
- * for matching rules. We grant the broadest possible set so any internal
- * check passes:
- *   - "*" / "*:*" / "*.*" — common super-admin wildcards
- *   - "ROLE_*" — Spring Security role prefixes commonly checked
- *   - "aitseo.run/*" / "aitseo.run/v1alpha1/*" — our own apiGroup
- *   - "role-template-aitseo-connect-manage" — our extensions/role.yaml role name
+ * For requests to /aitseo-connect/api/v1alpha1/**:
+ *   1. Inject a fully-authenticated principal so any Halo security check
+ *      that calls .authenticated() sees this request as logged-in.
+ *   2. Set CsrfWebFilter.SHOULD_NOT_FILTER attribute so Spring Security's
+ *      CSRF filter skips the request entirely (POST/PUT/DELETE from an
+ *      external API caller doesn't have a CSRF token).
  *
  * Real auth is enforced inside AitseoController.requireKey() via the
- * X-Connection-Key header. Halo just sees a logged-in super-user; the actual
- * gate is our own.
+ * X-Connection-Key header.
+ *
+ * Implements BOTH Spring's WebFilter (with @Order HIGHEST_PRECEDENCE) AND
+ * Halo's BeforeSecurityWebFilter SPI for maximum compat.
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -42,19 +38,7 @@ public class AitseoApiAuthFilter implements WebFilter, BeforeSecurityWebFilter {
         new UsernamePasswordAuthenticationToken(
             "aitseo-connect-api",
             "N/A",
-            AuthorityUtils.createAuthorityList(
-                "*",
-                "*:*",
-                "*.*",
-                "ROLE_USER",
-                "ROLE_ADMIN",
-                "ROLE_ADMINISTRATOR",
-                "ROLE_ANONYMOUS",
-                "aitseo.run/*",
-                "aitseo.run/v1alpha1/*",
-                "apiGroups:aitseo.run",
-                "role-template-aitseo-connect-manage",
-                "role-template-super-role"));
+            AuthorityUtils.createAuthorityList("ROLE_USER"));
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -62,7 +46,11 @@ public class AitseoApiAuthFilter implements WebFilter, BeforeSecurityWebFilter {
         if (!path.startsWith(PATH_PREFIX)) {
             return chain.filter(exchange);
         }
-        System.out.println("[AITSEO Connect Filter] Intercepting " + path + " -> injecting super-user auth context");
+        System.out.println("[AITSEO Connect Filter] " + exchange.getRequest().getMethod()
+            + " " + path + " -> bypass CSRF + inject auth");
+        // 跳过 Spring Security 的 CSRF 校验
+        exchange.getAttributes().put(
+            CsrfWebFilter.SHOULD_NOT_FILTER, Boolean.TRUE);
         SecurityContextImpl ctx = new SecurityContextImpl(AUTHED);
         return chain.filter(exchange)
             .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ctx)));
