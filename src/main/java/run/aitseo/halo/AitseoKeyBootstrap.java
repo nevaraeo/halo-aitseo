@@ -8,13 +8,12 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
-import run.halo.app.core.extension.ConfigMap;
+import run.halo.app.extension.ConfigMap;
 import run.halo.app.extension.ReactiveExtensionClient;
 
 import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 插件启动时, 检查 basic.connectionKey 是否为空。空的话生成一个 swc_+random hex,

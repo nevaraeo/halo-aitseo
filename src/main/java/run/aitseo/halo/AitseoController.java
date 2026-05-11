@@ -15,10 +15,8 @@ import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.content.Category;
 import run.halo.app.core.extension.content.Post;
 import run.halo.app.core.extension.content.Tag;
-import run.halo.app.extension.ListOptions;
 import run.halo.app.extension.Metadata;
 import run.halo.app.extension.ReactiveExtensionClient;
-import run.halo.app.extension.router.selector.FieldSelector;
 import run.halo.app.plugin.ReactiveSettingFetcher;
 
 import java.time.Instant;
@@ -88,7 +86,7 @@ public class AitseoController {
     public Mono<Map<String, Object>> siteInfo(
             @RequestHeader(value = "X-Connection-Key", required = false) String key) {
         return requireKey(key).then(
-            client.list(Post.class, new ListOptions(), null)
+            client.list(Post.class, p -> true, null, 0, 1)
                 .map(page -> {
                     Map<String, Object> resp = new HashMap<>();
                     resp.put("plugin", "aitseo-connect");
@@ -108,7 +106,7 @@ public class AitseoController {
     public Mono<Map<String, Object>> categories(
             @RequestHeader(value = "X-Connection-Key", required = false) String key) {
         return requireKey(key).then(
-            client.listAll(Category.class, new ListOptions(), null)
+            client.list(Category.class, c -> true, null)
                 .map(c -> {
                     Map<String, Object> m = new HashMap<>();
                     m.put("name", c.getMetadata().getName());
@@ -133,7 +131,7 @@ public class AitseoController {
     public Mono<Map<String, Object>> tags(
             @RequestHeader(value = "X-Connection-Key", required = false) String key) {
         return requireKey(key).then(
-            client.listAll(Tag.class, new ListOptions(), null)
+            client.list(Tag.class, t -> true, null)
                 .map(t -> {
                     Map<String, Object> m = new HashMap<>();
                     m.put("name", t.getMetadata().getName());
