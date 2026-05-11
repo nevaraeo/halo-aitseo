@@ -1,0 +1,34 @@
+plugins {
+    id 'java'
+    id 'run.halo.plugin.devtools' version '0.4.0'
+}
+
+group = 'run.aitseo'
+sourceCompatibility = JavaVersion.VERSION_17
+
+repositories {
+    mavenCentral()
+    maven { url 'https://s01.oss.sonatype.org/content/repositories/releases' }
+    maven { url 'https://s01.oss.sonatype.org/content/repositories/snapshots' }
+}
+
+dependencies {
+    implementation platform('run.halo.tools.platform:plugin:2.20.0')
+    compileOnly 'run.halo.app:api'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'run.halo.app:api'
+}
+
+halo {
+    version = '2.20.0'
+}
+
+haloPlugin {
+    manifestFile = file('src/main/resources/plugin.yaml')
+    require = '>=2.20.0'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

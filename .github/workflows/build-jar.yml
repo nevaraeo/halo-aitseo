@@ -1,0 +1,85 @@
+name: Build JAR + Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 创建 release + 上传 asset 需要
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Read plugin version
+        id: version
+        run: |
+          VERSION=$(grep -E '^  version:' src/main/resources/plugin.yaml | sed 's/.*version: *//' | tr -d '"')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Plugin version: $VERSION"
+
+      - name: Build JAR
+        run: |
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew clean build -x test --info
+          else
+            gradle clean build -x test --info
+          fi
+
+      - name: Find built JAR
+        id: jar
+        run: |
+          JAR=$(find build/libs -name 'aitseo-connect-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)
+          if [ -z "$JAR" ]; then
+            echo "❌ JAR not found in build/libs/"
+            ls -la build/libs/ || true
+            exit 1
+          fi
+          echo "jar_path=$JAR" >> $GITHUB_OUTPUT
+          # 重命名为固定名 (方便下载链接稳定)
+          cp "$JAR" build/libs/aitseo-connect.jar
+          echo "stable_path=build/libs/aitseo-connect.jar" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact (debug 可下载)
+        uses: actions/upload-artifact@v4
+        with:
+          name: aitseo-connect-${{ steps.version.outputs.version }}-${{ github.sha }}
+          path: build/libs/aitseo-connect.jar
+          retention-days: 30
+
+      - name: Create/update GitHub Release (main 分支)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Latest build (auto)"
+          body: |
+            自动构建于 commit ${{ github.sha }}
+
+            版本: ${{ steps.version.outputs.version }}
+
+            下载 `aitseo-connect.jar`, 在 Halo 后台 → 插件 → 安装 上传即可。
+          files: build/libs/aitseo-connect.jar
+          prerelease: false
+          make_latest: true
+
+      - name: Create tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/libs/aitseo-connect.jar
+          generate_release_notes: true

@@ -1,0 +1,15 @@
+apiVersion: v1alpha2
+kind: Role
+metadata:
+  name: role-template-aitseo-connect-manage
+  labels:
+    halo.run/role-template: "true"
+  annotations:
+    rbac.authorization.halo.run/module: "AITSEO Connect"
+    rbac.authorization.halo.run/display-name: "AITSEO Connect 管理"
+    rbac.authorization.halo.run/ui-permissions: |
+      ["plugin:aitseo-connect:manage"]
+rules:
+  - apiGroups: ["aitseo.run"]
+    resources: ["*"]
+    verbs: ["*"]

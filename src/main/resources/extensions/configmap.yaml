@@ -1,0 +1,9 @@
+apiVersion: v1alpha1
+kind: ConfigMap
+metadata:
+  name: aitseo-connect-configmap
+data:
+  basic: |
+    {
+      "connectionKey": ""
+    }

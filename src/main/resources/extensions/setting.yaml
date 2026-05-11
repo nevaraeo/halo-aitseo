@@ -1,0 +1,33 @@
+apiVersion: v1alpha1
+kind: Setting
+metadata:
+  name: aitseo-connect-setting
+spec:
+  forms:
+    - group: basic
+      label: 基础配置
+      formSchema:
+        - $formkit: text
+          name: connectionKey
+          label: 连接密钥 (Connection Key)
+          help: "粘贴到 AITSEO dashboard 用于验证身份。留空时插件激活会自动生成。重新生成会失效旧的密钥。"
+          placeholder: "swc_..."
+          validation: "length:32"
+        - $formkit: text
+          name: defaultCategory
+          label: 默认分类 (可选)
+          help: "AITSEO 发布文章时如未指定分类, 自动归到这个分类的 metadata.name"
+          placeholder: "default-category-name"
+        - $formkit: text
+          name: defaultTags
+          label: 默认标签 (可选, 逗号分隔)
+          help: "AITSEO 发布文章时如未指定标签, 自动加这些标签 (metadata.name 列表, 逗号分隔)"
+          placeholder: "ai-generated,seo"
+        - $formkit: select
+          name: publishImmediately
+          label: 自动发布
+          help: "AITSEO 推送来的文章是否立即发布。否 = 留草稿, 需要人工审核。"
+          value: "true"
+          options:
+            - { label: "立即发布", value: "true" }
+            - { label: "存草稿", value: "false" }

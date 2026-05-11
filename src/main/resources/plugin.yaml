@@ -1,0 +1,20 @@
+apiVersion: plugin.halo.run/v1alpha1
+kind: Plugin
+metadata:
+  name: aitseo-connect
+spec:
+  enabled: true
+  requires: ">=2.20.0"
+  version: 1.0.0
+  author:
+    name: AITSEO
+    website: https://aitseo.com
+  logo: logo.png
+  homepage: https://aitseo.com
+  repo: https://github.com/nevaraeo/halo-aitseo
+  issues: https://github.com/nevaraeo/halo-aitseo/issues
+  displayName: "AITSEO Connect"
+  description: "把 AITSEO 生成的 SEO 文章一键发布到 Halo 站点 — 跟 WordPress AITSEO Connect 插件配套设计, 使用连接密钥 (X-Connection-Key) 认证."
+  license:
+    - name: "GPL-2.0"
+      url: "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html"
