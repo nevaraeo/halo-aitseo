@@ -7,7 +7,7 @@ spec:
   requires: ">=2.20.0"
   settingName: aitseo-connect-setting
   configMapName: aitseo-connect-configmap
-  version: 1.0.4
+  version: 1.0.5
   author:
     name: AITSEO
     website: https://aitseo.com
