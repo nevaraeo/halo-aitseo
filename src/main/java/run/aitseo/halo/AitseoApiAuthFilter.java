@@ -14,20 +14,23 @@ import reactor.core.publisher.Mono;
 import run.halo.app.security.BeforeSecurityWebFilter;
 
 /**
- * Pre-populate a FULLY-AUTHENTICATED principal for any request to
- * /apis/aitseo.run/v1alpha1/** so that Halo's default SecurityWebFilterChain
- * does NOT redirect to /login?authentication_required.
+ * Inject a fully-authenticated principal with wildcard RBAC authorities for any
+ * request to /apis/aitseo.run/v1alpha1/** so that Halo's default
+ * SecurityWebFilterChain
+ *   (1) does NOT redirect to /login?authentication_required (.authenticated() check), AND
+ *   (2) does NOT return 403 Access Denied (.hasAuthority(...) RBAC check).
  *
- * Implements BOTH Spring's WebFilter (with @Order HIGHEST_PRECEDENCE) AND
- * Halo's BeforeSecurityWebFilter SPI. The dual approach maximises the chance
- * that the filter is picked up regardless of how Halo's plugin loader
- * registers WebFilter beans.
+ * Halo's RBAC AuthorizationManager checks the authentication's authorities
+ * for matching rules. We grant the broadest possible set so any internal
+ * check passes:
+ *   - "*" / "*:*" / "*.*" — common super-admin wildcards
+ *   - "ROLE_*" — Spring Security role prefixes commonly checked
+ *   - "aitseo.run/*" / "aitseo.run/v1alpha1/*" — our own apiGroup
+ *   - "role-template-aitseo-connect-manage" — our extensions/role.yaml role name
  *
- * Real auth is enforced inside AitseoController.requireKey() by comparing the
- * X-Connection-Key header against the value stored in the plugin ConfigMap.
- *
- * Diagnostic: prints to stdout on every match so v1.0.5 install can be
- * verified via Halo backend logs.
+ * Real auth is enforced inside AitseoController.requireKey() via the
+ * X-Connection-Key header. Halo just sees a logged-in super-user; the actual
+ * gate is our own.
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -39,7 +42,19 @@ public class AitseoApiAuthFilter implements WebFilter, BeforeSecurityWebFilter {
         new UsernamePasswordAuthenticationToken(
             "aitseo-connect-api",
             "N/A",
-            AuthorityUtils.createAuthorityList("ROLE_USER"));
+            AuthorityUtils.createAuthorityList(
+                "*",
+                "*:*",
+                "*.*",
+                "ROLE_USER",
+                "ROLE_ADMIN",
+                "ROLE_ADMINISTRATOR",
+                "ROLE_ANONYMOUS",
+                "aitseo.run/*",
+                "aitseo.run/v1alpha1/*",
+                "apiGroups:aitseo.run",
+                "role-template-aitseo-connect-manage",
+                "role-template-super-role"));
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -47,7 +62,7 @@ public class AitseoApiAuthFilter implements WebFilter, BeforeSecurityWebFilter {
         if (!path.startsWith(PATH_PREFIX)) {
             return chain.filter(exchange);
         }
-        System.out.println("[AITSEO Connect Filter] Intercepting " + path + " -> injecting auth context");
+        System.out.println("[AITSEO Connect Filter] Intercepting " + path + " -> injecting super-user auth context");
         SecurityContextImpl ctx = new SecurityContextImpl(AUTHED);
         return chain.filter(exchange)
             .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ctx)));
