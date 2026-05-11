@@ -9,22 +9,34 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
-import run.halo.app.security.AdditionalWebFilter;
+import run.halo.app.security.BeforeSecurityWebFilter;
 
 /**
  * Pre-populate an anonymous authentication for any request to /apis/aitseo.run/v1alpha1/**
- * BEFORE Halo's default security chain runs. This lets our REST controller handle
- * the request without Halo's auth filter redirecting unauthenticated requests to
- * the HTML login page.
+ * BEFORE Halo's default security chain runs.
  *
- * Auth is enforced by AitseoController.requireKey via X-Connection-Key header.
+ * Why: Halo's default SecurityWebFilterChain redirects unauthenticated requests to
+ * the HTML console login page, breaking the JSON contract for external API callers
+ * (e.g. AITSEO backend calling our plugin endpoints with X-Connection-Key).
  *
- * Implements Halo's AdditionalWebFilter SPI (extends WebFilter + pf4j ExtensionPoint).
+ * Real auth is enforced inside AitseoController.requireKey() by comparing the
+ * X-Connection-Key header against the value stored in the plugin's ConfigMap.
+ *
+ * Uses Halo SPI run.halo.app.security.BeforeSecurityWebFilter so that this filter
+ * is registered into the chain BEFORE Halo's main security filter chain (the
+ * generic AdditionalWebFilter SPI does not guarantee ordering relative to
+ * Halo's security).
  */
 @Component
-public class AitseoAnonymousAccessFilter implements AdditionalWebFilter {
+public class AitseoAnonymousAccessFilter implements BeforeSecurityWebFilter {
 
     private static final String PATH_PREFIX = "/apis/aitseo.run/v1alpha1/";
+
+    private static final AnonymousAuthenticationToken ANON =
+        new AnonymousAuthenticationToken(
+            "aitseo-connect",
+            "aitseoApiUser",
+            AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS"));
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
@@ -32,16 +44,11 @@ public class AitseoAnonymousAccessFilter implements AdditionalWebFilter {
         if (!path.startsWith(PATH_PREFIX)) {
             return chain.filter(exchange);
         }
-        AnonymousAuthenticationToken anon = new AnonymousAuthenticationToken(
-            "aitseo-connect",
-            "aitseoApiUser",
-            AuthorityUtils.createAuthorityList("ROLE_ANONYMOUS"));
-        SecurityContextImpl ctx = new SecurityContextImpl(anon);
+        SecurityContextImpl ctx = new SecurityContextImpl(ANON);
         return chain.filter(exchange)
             .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ctx)));
     }
 
-    @Override
     public int getOrder() {
         return Ordered.HIGHEST_PRECEDENCE;
     }
