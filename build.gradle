@@ -28,11 +28,6 @@ halo {
     version = '2.20.0'
 }
 
-haloPlugin {
-    manifestFile = file('src/main/resources/plugin.yaml')
-    require = '>=2.20.0'
-}
-
 tasks.named('test') {
     useJUnitPlatform()
 }
