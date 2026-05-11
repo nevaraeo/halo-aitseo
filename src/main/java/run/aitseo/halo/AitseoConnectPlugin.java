@@ -5,20 +5,36 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
+import reactor.util.retry.Retry;
 import run.halo.app.extension.ConfigMap;
 import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.plugin.BasePlugin;
 import run.halo.app.plugin.PluginContext;
 
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * AITSEO Connect - Halo plugin entry.
+ *
+ * On plugin start:
+ *   1. Try to fetch ConfigMap aitseo-connect-configmap (Halo creates this
+ *      lazily from extensions/configmap.yaml; may not exist immediately)
+ *   2. Retry every 2 seconds for up to 60 seconds if not found yet
+ *   3. Once found, if basic.connectionKey is empty, generate
+ *      swc_+32-byte-hex and write back via client.update()
+ *
+ * This is the equivalent of WordPress register_activation_hook.
+ */
 @Component
 public class AitseoConnectPlugin extends BasePlugin {
 
     private static final String CONFIGMAP_NAME = "aitseo-connect-configmap";
     private static final String BASIC_GROUP = "basic";
+    private static final int MAX_FETCH_RETRIES = 30;
+    private static final Duration FETCH_RETRY_DELAY = Duration.ofSeconds(2);
     private static final SecureRandom RNG = new SecureRandom();
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -33,10 +49,10 @@ public class AitseoConnectPlugin extends BasePlugin {
     public void start() {
         System.out.println("[AITSEO Connect] Plugin starting - REST endpoints ready at /apis/aitseo.run/v1alpha1/*");
         ensureConnectionKey()
-            .doOnError(err -> System.err.println(
-                "[AITSEO Connect] Failed to ensure connection key: " + err.getMessage()))
-            .onErrorResume(err -> Mono.empty())
-            .subscribe();
+            .subscribe(
+                unused -> {},
+                err -> System.err.println("[AITSEO Connect] ensureConnectionKey terminal error: " + err.getMessage())
+            );
     }
 
     @Override
@@ -44,40 +60,62 @@ public class AitseoConnectPlugin extends BasePlugin {
         System.out.println("[AITSEO Connect] Plugin stopped");
     }
 
+    /**
+     * Fetch ConfigMap with retries (Halo creates it lazily from extensions/).
+     * Once obtained, check basic.connectionKey; if empty, generate a key and
+     * update the ConfigMap.
+     */
     private Mono<Void> ensureConnectionKey() {
-        return client.fetch(ConfigMap.class, CONFIGMAP_NAME)
-            .flatMap(cm -> {
-                Map<String, String> data = cm.getData();
-                if (data == null) data = new HashMap<>();
-                String basicJson = data.getOrDefault(BASIC_GROUP, "{}");
-                ObjectNode basic;
-                try {
-                    basic = (ObjectNode) objectMapper.readTree(basicJson);
-                } catch (Exception e) {
-                    basic = objectMapper.createObjectNode();
-                }
-                String existing = basic.hasNonNull("connectionKey")
-                    ? basic.get("connectionKey").asText()
-                    : "";
-                if (existing != null && !existing.isBlank()) {
-                    System.out.println("[AITSEO Connect] Connection key already set, keeping existing value");
-                    return Mono.empty();
-                }
-                String newKey = "swc_" + randomHex(32);
-                basic.put("connectionKey", newKey);
-                try {
-                    data.put(BASIC_GROUP, objectMapper.writeValueAsString(basic));
-                    cm.setData(data);
-                    System.out.println("[AITSEO Connect] Auto-generated connection key (view it under Plugins > AITSEO Connect > Settings)");
-                    return client.update(cm).then();
-                } catch (JsonProcessingException e) {
-                    return Mono.error(e);
-                }
-            })
-            .switchIfEmpty(Mono.defer(() -> {
-                System.out.println("[AITSEO Connect] ConfigMap not ready yet - will retry on next start");
+        return fetchConfigMapWithRetry()
+            .flatMap(this::generateKeyIfMissing)
+            .onErrorResume(err -> {
+                System.err.println("[AITSEO Connect] ensureConnectionKey failed: " + err.getMessage());
                 return Mono.empty();
-            }));
+            });
+    }
+
+    private Mono<ConfigMap> fetchConfigMapWithRetry() {
+        return client.fetch(ConfigMap.class, CONFIGMAP_NAME)
+            .switchIfEmpty(Mono.defer(() -> {
+                System.out.println("[AITSEO Connect] ConfigMap not ready, will retry...");
+                return Mono.error(new IllegalStateException("ConfigMap not ready"));
+            }))
+            .retryWhen(Retry.fixedDelay(MAX_FETCH_RETRIES, FETCH_RETRY_DELAY)
+                .filter(t -> t instanceof IllegalStateException)
+                .doBeforeRetry(sig -> System.out.println(
+                    "[AITSEO Connect] retry " + (sig.totalRetries() + 1)
+                        + "/" + MAX_FETCH_RETRIES + " fetch ConfigMap")));
+    }
+
+    private Mono<Void> generateKeyIfMissing(ConfigMap cm) {
+        Map<String, String> data = cm.getData();
+        if (data == null) data = new HashMap<>();
+        String basicJson = data.getOrDefault(BASIC_GROUP, "{}");
+        ObjectNode basic;
+        try {
+            basic = (ObjectNode) objectMapper.readTree(basicJson);
+        } catch (Exception e) {
+            basic = objectMapper.createObjectNode();
+        }
+        String existing = basic.hasNonNull("connectionKey")
+            ? basic.get("connectionKey").asText()
+            : "";
+        if (existing != null && !existing.isBlank()) {
+            System.out.println("[AITSEO Connect] connectionKey already set (" + existing.substring(0, Math.min(8, existing.length())) + "...), keeping");
+            return Mono.empty();
+        }
+        String newKey = "swc_" + randomHex(32);
+        basic.put("connectionKey", newKey);
+        try {
+            data.put(BASIC_GROUP, objectMapper.writeValueAsString(basic));
+            cm.setData(data);
+        } catch (JsonProcessingException e) {
+            return Mono.error(e);
+        }
+        return client.update(cm)
+            .doOnSuccess(updated -> System.out.println(
+                "[AITSEO Connect] Auto-generated connection key. Check 'Plugins -> AITSEO Connect -> Settings' to copy it."))
+            .then();
     }
 
     private static String randomHex(int bytes) {
