@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # 创建 release + 上传 asset 需要
+      contents: write
 
     steps:
       - uses: actions/checkout@v4
@@ -21,8 +21,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.5 (Halo plugin 0.4.0 不兼容 Gradle 9.x)
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.5'
 
       - name: Read plugin version
         id: version
@@ -32,36 +34,33 @@ jobs:
           echo "Plugin version: $VERSION"
 
       - name: Build JAR
-        run: |
-          if [ -f ./gradlew ]; then
-            chmod +x ./gradlew
-            ./gradlew clean build -x test --info
-          else
-            gradle clean build -x test --info
-          fi
+        run: gradle clean build -x test --info --stacktrace
 
       - name: Find built JAR
         id: jar
         run: |
-          JAR=$(find build/libs -name 'aitseo-connect-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)
+          ls -la build/libs/ || true
+          JAR=$(find build/libs -name 'aitseo-connect-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' ! -name '*-plain.jar' | head -1)
+          if [ -z "$JAR" ]; then
+            # 试 plain.jar (Spring Boot 项目可能输出这个)
+            JAR=$(find build/libs -name 'aitseo-connect-*.jar' | head -1)
+          fi
           if [ -z "$JAR" ]; then
             echo "❌ JAR not found in build/libs/"
-            ls -la build/libs/ || true
             exit 1
           fi
-          echo "jar_path=$JAR" >> $GITHUB_OUTPUT
-          # 重命名为固定名 (方便下载链接稳定)
           cp "$JAR" build/libs/aitseo-connect.jar
           echo "stable_path=build/libs/aitseo-connect.jar" >> $GITHUB_OUTPUT
+          echo "Built JAR: $JAR"
 
-      - name: Upload artifact (debug 可下载)
+      - name: Upload artifact (debug)
         uses: actions/upload-artifact@v4
         with:
           name: aitseo-connect-${{ steps.version.outputs.version }}-${{ github.sha }}
           path: build/libs/aitseo-connect.jar
           retention-days: 30
 
-      - name: Create/update GitHub Release (main 分支)
+      - name: Create/update GitHub Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
