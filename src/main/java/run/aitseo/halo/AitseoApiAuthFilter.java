@@ -15,7 +15,7 @@ import run.halo.app.security.BeforeSecurityWebFilter;
 
 /**
  * Inject a fully-authenticated principal with wildcard RBAC authorities for any
- * request to /apis/aitseo.run/v1alpha1/** so that Halo's default
+ * request to /aitseo-connect/api/v1alpha1/** so that Halo's default
  * SecurityWebFilterChain
  *   (1) does NOT redirect to /login?authentication_required (.authenticated() check), AND
  *   (2) does NOT return 403 Access Denied (.hasAuthority(...) RBAC check).
@@ -36,7 +36,7 @@ import run.halo.app.security.BeforeSecurityWebFilter;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class AitseoApiAuthFilter implements WebFilter, BeforeSecurityWebFilter {
 
-    private static final String PATH_PREFIX = "/apis/aitseo.run/v1alpha1/";
+    private static final String PATH_PREFIX = "/aitseo-connect/api/v1alpha1/";
 
     private static final UsernamePasswordAuthenticationToken AUTHED =
         new UsernamePasswordAuthenticationToken(

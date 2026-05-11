@@ -28,21 +28,21 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * AITSEO Connect — REST endpoints under /apis/aitseo.run/v1alpha1/
+ * AITSEO Connect — REST endpoints under /aitseo-connect/api/v1alpha1/
  *
  * 所有 mutation endpoint 都用 X-Connection-Key header 验证, 跟 WP 插件设计完全对齐。
  * 这样 AITSEO 后端只需要存 connection_key (跟 WordPress 一样的 UX), 不需要 PAT。
  *
  * Endpoints:
- *   GET  /apis/aitseo.run/v1alpha1/site-info        — 验证 key + 返回站点基本信息
- *   GET  /apis/aitseo.run/v1alpha1/categories       — 分类列表
- *   GET  /apis/aitseo.run/v1alpha1/tags             — 标签列表
- *   POST /apis/aitseo.run/v1alpha1/publish          — 创建文章 (可选立即发布)
+ *   GET  /aitseo-connect/api/v1alpha1/site-info        — 验证 key + 返回站点基本信息
+ *   GET  /aitseo-connect/api/v1alpha1/categories       — 分类列表
+ *   GET  /aitseo-connect/api/v1alpha1/tags             — 标签列表
+ *   POST /aitseo-connect/api/v1alpha1/publish          — 创建文章 (可选立即发布)
  *
  * 注: 用 Spring WebFlux reactive 模式。所有方法返回 Mono<T>。
  */
 @RestController
-@RequestMapping("/apis/aitseo.run/v1alpha1")
+@RequestMapping("/aitseo-connect/api/v1alpha1")
 public class AitseoController {
 
     private final ReactiveExtensionClient client;
