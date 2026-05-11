@@ -5,7 +5,9 @@ metadata:
 spec:
   enabled: true
   requires: ">=2.20.0"
-  version: 1.0.0
+  settingName: aitseo-connect-setting
+  configMapName: aitseo-connect-configmap
+  version: 1.0.1
   author:
     name: AITSEO
     website: https://aitseo.com

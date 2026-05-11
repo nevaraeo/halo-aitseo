@@ -1,37 +1,90 @@
 package run.aitseo.halo;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Mono;
+import run.halo.app.extension.ConfigMap;
+import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.plugin.BasePlugin;
 import run.halo.app.plugin.PluginContext;
 
-/**
- * AITSEO Connect — Halo 插件主入口。
- *
- * 跟 WordPress 的 AITSEO Connect 插件设计一致:
- *   - 激活时自动生成连接密钥 (Connection Key), 存到 settings 里
- *   - 暴露 REST endpoints (/apis/aitseo.run/v1alpha1/*) 用 X-Connection-Key 头验证
- *   - 用户在 Halo 后台 "插件 → AITSEO Connect → 设置" 里看密钥, 粘到 AITSEO dashboard
- *
- * 跟 Halo 官方 UC API (PAT 方式) 对比:
- *   - PAT 路线: 用户去「个人中心 → 个人令牌」生成, 给 AITSEO 用
- *   - 本插件路线: 装插件 → 激活自动生成 connection_key, 像 WordPress 一样, 用户体验更熟
- *
- * 两种方式我们后端都支持 (lib/halo.ts), 用户挑一种用就行。
- */
+import java.security.SecureRandom;
+import java.util.HashMap;
+import java.util.Map;
+
 @Component
 public class AitseoConnectPlugin extends BasePlugin {
 
-    public AitseoConnectPlugin(PluginContext pluginContext) {
+    private static final String CONFIGMAP_NAME = "aitseo-connect-configmap";
+    private static final String BASIC_GROUP = "basic";
+    private static final SecureRandom RNG = new SecureRandom();
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    private final ReactiveExtensionClient client;
+
+    public AitseoConnectPlugin(PluginContext pluginContext, ReactiveExtensionClient client) {
         super(pluginContext);
+        this.client = client;
     }
 
     @Override
     public void start() {
-        System.out.println("[AITSEO Connect] 插件已启动 — 端点已就绪 (/apis/aitseo.run/v1alpha1/*)");
+        System.out.println("[AITSEO Connect] Plugin starting - REST endpoints ready at /apis/aitseo.run/v1alpha1/*");
+        ensureConnectionKey()
+            .doOnError(err -> System.err.println(
+                "[AITSEO Connect] Failed to ensure connection key: " + err.getMessage()))
+            .onErrorResume(err -> Mono.empty())
+            .subscribe();
     }
 
     @Override
     public void stop() {
-        System.out.println("[AITSEO Connect] 插件已停用");
+        System.out.println("[AITSEO Connect] Plugin stopped");
+    }
+
+    private Mono<Void> ensureConnectionKey() {
+        return client.fetch(ConfigMap.class, CONFIGMAP_NAME)
+            .flatMap(cm -> {
+                Map<String, String> data = cm.getData();
+                if (data == null) data = new HashMap<>();
+                String basicJson = data.getOrDefault(BASIC_GROUP, "{}");
+                ObjectNode basic;
+                try {
+                    basic = (ObjectNode) objectMapper.readTree(basicJson);
+                } catch (Exception e) {
+                    basic = objectMapper.createObjectNode();
+                }
+                String existing = basic.hasNonNull("connectionKey")
+                    ? basic.get("connectionKey").asText()
+                    : "";
+                if (existing != null && !existing.isBlank()) {
+                    System.out.println("[AITSEO Connect] Connection key already set, keeping existing value");
+                    return Mono.empty();
+                }
+                String newKey = "swc_" + randomHex(32);
+                basic.put("connectionKey", newKey);
+                try {
+                    data.put(BASIC_GROUP, objectMapper.writeValueAsString(basic));
+                    cm.setData(data);
+                    System.out.println("[AITSEO Connect] Auto-generated connection key (view it under Plugins > AITSEO Connect > Settings)");
+                    return client.update(cm).then();
+                } catch (JsonProcessingException e) {
+                    return Mono.error(e);
+                }
+            })
+            .switchIfEmpty(Mono.defer(() -> {
+                System.out.println("[AITSEO Connect] ConfigMap not ready yet - will retry on next start");
+                return Mono.empty();
+            }));
+    }
+
+    private static String randomHex(int bytes) {
+        byte[] buf = new byte[bytes];
+        RNG.nextBytes(buf);
+        StringBuilder sb = new StringBuilder(bytes * 2);
+        for (byte b : buf) sb.append(String.format("%02x", b));
+        return sb.toString();
     }
 }
