@@ -50,7 +50,7 @@ public class AitseoApiAuthFilter implements WebFilter, BeforeSecurityWebFilter {
             + " " + path + " -> bypass CSRF + inject auth");
         // 跳过 Spring Security 的 CSRF 校验
         exchange.getAttributes().put(
-            CsrfWebFilter.SHOULD_NOT_FILTER, Boolean.TRUE);
+            "SHOULD_NOT_FILTER" + CsrfWebFilter.class.getName(), Boolean.TRUE);
         SecurityContextImpl ctx = new SecurityContextImpl(AUTHED);
         return chain.filter(exchange)
             .contextWrite(ReactiveSecurityContextHolder.withSecurityContext(Mono.just(ctx)));
