@@ -97,11 +97,40 @@ public class AitseoController {
     // ════════════════════════════════════════════════════════════════
     @PostMapping("/init-key")
     public Mono<Map<String, Object>> initKey() {
+        // 现在 extensions/configmap.yaml 不再预置 ConfigMap (v1.0.22+, 避开 Halo
+        // PluginStartedListener 跟自己撞 OptimisticLocking). ConfigMap 在用户
+        // 首次保存设置 OR 调本 endpoint 时按需创建.
         return client.fetch(ConfigMap.class, CONFIGMAP_NAME)
             .flatMap(this::doInitKey)
+            .switchIfEmpty(Mono.defer(this::createConfigMapWithKey))
             .retryWhen(Retry.fixedDelay(3, Duration.ofMillis(500))
                 .filter(t -> t instanceof OptimisticLockingFailureException
                     || (t.getCause() != null && t.getCause() instanceof OptimisticLockingFailureException)));
+    }
+
+    /** ConfigMap 不存在时, 自己创建并写入 connectionKey. */
+    private Mono<Map<String, Object>> createConfigMapWithKey() {
+        String newKey = "swc_" + randomHex(32);
+        ObjectNode basic = objectMapper.createObjectNode();
+        basic.put("connectionKey", newKey);
+        Map<String, String> data = new HashMap<>();
+        try {
+            data.put("basic", objectMapper.writeValueAsString(basic));
+        } catch (Exception e) {
+            return Mono.error(e);
+        }
+        ConfigMap cm = new ConfigMap();
+        Metadata meta = new Metadata();
+        meta.setName(CONFIGMAP_NAME);
+        cm.setMetadata(meta);
+        cm.setData(data);
+        return client.create(cm).thenReturn(newKey).map(key -> {
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("ok", true);
+            resp.put("connection_key", key);
+            resp.put("generated", true);
+            return resp;
+        });
     }
 
     private Mono<Map<String, Object>> doInitKey(ConfigMap cm) {

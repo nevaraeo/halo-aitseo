@@ -9,14 +9,13 @@ spec:
       formSchema:
         - $formkit: text
           name: connectionKey
-          label: 连接密钥 (Connection Key)
+          label: 连接密钥 (Connection Key, 只读)
           help: |
-            ⚠️ 必填. 自己生成一个 swc_ 开头的 32+ 字符字符串, 例如:
-            swc_aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899
-            把同一字符串复制到 AITSEO dashboard 的「Connection Key」字段, 两边一致就能验证连接.
-            (随机生成器: 命令行 `openssl rand -hex 32` 或在线 hex 生成器)
-          placeholder: "swc_..."
-          validation: "length:32"
+            ⚠️ 此密钥由 AITSEO dashboard 自动申请生成, 不要在此处手动编辑.
+            到 AITSEO dashboard → 平台绑定 → Halo 卡片, 填站点地址后点
+            「自动申请密钥」按钮即可生成. 该字段仅用于显示, 修改无效.
+          placeholder: "(尚未生成, 去 AITSEO dashboard 申请)"
+          disabled: true
         - $formkit: text
           name: publishOwner
           label: 文章作者 username
