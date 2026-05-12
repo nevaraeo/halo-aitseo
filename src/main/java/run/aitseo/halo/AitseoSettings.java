@@ -3,7 +3,7 @@ package run.aitseo.halo;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
- * 插件 settings 的 basic 组数据结构 — 跟 src/main/resources/extensions/setting.yaml 的字段对应。
+ * Settings group "basic" - mirrors src/main/resources/extensions/setting.yaml.
  */
 public class AitseoSettings {
 
@@ -19,6 +19,9 @@ public class AitseoSettings {
     @JsonProperty("publishImmediately")
     private String publishImmediately = "true";
 
+    @JsonProperty("publishOwner")
+    private String publishOwner = "admin";
+
     public String getConnectionKey() { return connectionKey == null ? "" : connectionKey; }
     public void setConnectionKey(String v) { this.connectionKey = v; }
 
@@ -30,6 +33,11 @@ public class AitseoSettings {
 
     public String getPublishImmediately() { return publishImmediately == null ? "true" : publishImmediately; }
     public void setPublishImmediately(String v) { this.publishImmediately = v; }
+
+    public String getPublishOwner() {
+        return (publishOwner == null || publishOwner.isBlank()) ? "admin" : publishOwner;
+    }
+    public void setPublishOwner(String v) { this.publishOwner = v; }
 
     public boolean shouldPublishImmediately() {
         return "true".equalsIgnoreCase(getPublishImmediately());

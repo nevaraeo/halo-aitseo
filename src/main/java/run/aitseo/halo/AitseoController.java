@@ -201,6 +201,7 @@ public class AitseoController {
 
                 Post.PostSpec spec = new Post.PostSpec();
                 spec.setTitle(body.title);
+                spec.setOwner(settings.getPublishOwner());  // Halo article-list admin filters by owner; settings.publishOwner defaults to "admin"
                 spec.setSlug(slug);
                 spec.setDeleted(false);
                 spec.setPublish(false);

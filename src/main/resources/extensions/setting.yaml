@@ -14,6 +14,12 @@ spec:
           placeholder: "swc_..."
           validation: "length:32"
         - $formkit: text
+          name: publishOwner
+          label: 文章作者 username
+          help: "AITSEO 推送的文章会以这个用户的身份发布。默认 admin，如果你改过 Halo 默认管理员名字请填实际 username (注:不是显示名)。Halo 后台「文章管理」会按这个 username 过滤展示。"
+          placeholder: "admin"
+          value: "admin"
+        - $formkit: text
           name: defaultCategory
           label: 默认分类 (可选)
           help: "AITSEO 发布文章时如未指定分类, 自动归到这个分类的 metadata.name"
