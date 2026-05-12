@@ -14,8 +14,10 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
 import run.halo.app.core.extension.content.Category;
 import run.halo.app.core.extension.content.Post;
+import run.halo.app.core.extension.content.Snapshot;
 import run.halo.app.core.extension.content.Tag;
 import run.halo.app.extension.Metadata;
+import run.halo.app.extension.Ref;
 import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.plugin.ReactiveSettingFetcher;
 
@@ -25,6 +27,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -182,33 +186,52 @@ public class AitseoController {
                     ? body.tags
                     : parseCsv(settings.getDefaultTags());
 
+                String snapshotName = postName + "-snap";
+                String owner = settings.getPublishOwner();
+
+                // 1) Build Snapshot resource (Halo stores post content in Snapshot extensions, NOT
+                //    in Post annotations; the base snapshot's rawPatch/contentPatch is the full HTML,
+                //    later snapshots store diff patches.)
+                Snapshot snapshot = new Snapshot();
+                Metadata snapMeta = new Metadata();
+                snapMeta.setName(snapshotName);
+                snapshot.setMetadata(snapMeta);
+
+                Ref subjectRef = new Ref();
+                subjectRef.setGroup("content.halo.run");
+                subjectRef.setVersion("v1alpha1");
+                subjectRef.setKind("Post");
+                subjectRef.setName(postName);
+
+                Snapshot.SnapShotSpec snapSpec = new Snapshot.SnapShotSpec();
+                snapSpec.setSubjectRef(subjectRef);
+                snapSpec.setRawType("html");
+                snapSpec.setRawPatch(body.contentHtml);
+                snapSpec.setContentPatch(body.contentHtml);
+                snapSpec.setOwner(owner);
+                snapSpec.setLastModifyTime(Instant.now());
+                snapshot.setSpec(snapSpec);
+
+                // 2) Build Post resource referencing the Snapshot.
                 Post post = new Post();
                 Metadata metadata = new Metadata();
                 metadata.setName(postName);
-
-                Map<String, String> annotations = new HashMap<>();
-                Map<String, Object> contentJson = new HashMap<>();
-                contentJson.put("raw", body.contentHtml);
-                contentJson.put("content", body.contentHtml);
-                contentJson.put("rawType", "html");
-                try {
-                    annotations.put("content.halo.run/content-json", objectMapper.writeValueAsString(contentJson));
-                } catch (Exception e) {
-                    return Mono.error(new RuntimeException("content-json 序列化失败: " + e.getMessage()));
-                }
-                metadata.setAnnotations(annotations);
                 post.setMetadata(metadata);
 
                 Post.PostSpec spec = new Post.PostSpec();
                 spec.setTitle(body.title);
-                spec.setOwner(settings.getPublishOwner());  // Halo article-list admin filters by owner; settings.publishOwner defaults to "admin"
+                spec.setOwner(owner);
                 spec.setSlug(slug);
+                spec.setBaseSnapshot(snapshotName);
+                spec.setHeadSnapshot(snapshotName);
                 spec.setDeleted(false);
                 spec.setPublish(false);
                 spec.setPinned(false);
                 spec.setAllowComment(true);
                 spec.setVisible(Post.VisibleEnum.PUBLIC);
                 spec.setPriority(0);
+                String cover = extractFirstImage(body.contentHtml);
+                if (cover != null) spec.setCover(cover);
 
                 Post.Excerpt excerpt = new Post.Excerpt();
                 if (body.excerpt != null && !body.excerpt.isBlank()) {
@@ -223,11 +246,15 @@ public class AitseoController {
                 spec.setTags(finalTags);
                 post.setSpec(spec);
 
-                return client.create(post)
+                // 3) Create snapshot first, then post (Halo will accept post.baseSnapshot ref).
+                //    If publishing: set releaseSnapshot + publish=true + publishTime.
+                return client.create(snapshot)
+                    .then(client.create(post))
                     .flatMap(created -> {
                         if (!publish) {
                             return Mono.just(buildResp(created.getMetadata().getName(), "draft", null));
                         }
+                        created.getSpec().setReleaseSnapshot(snapshotName);
                         created.getSpec().setPublish(true);
                         created.getSpec().setPublishTime(Instant.now());
                         return client.update(created)
@@ -254,6 +281,14 @@ public class AitseoController {
             .map(String::trim)
             .filter(s -> !s.isEmpty())
             .collect(Collectors.toList());
+    }
+
+    /** Extract first <img src="..."> URL from HTML for Post cover. Returns null if none. */
+    private static final Pattern IMG_PATTERN = Pattern.compile("<img[^>]+src=[\"']([^\"']+)[\"']");
+    private String extractFirstImage(String html) {
+        if (html == null || html.isBlank()) return null;
+        Matcher m = IMG_PATTERN.matcher(html);
+        return m.find() ? m.group(1) : null;
     }
 
     private String slugify(String title) {
