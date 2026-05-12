@@ -7,11 +7,11 @@ spec:
   requires: ">=2.20.0"
   settingName: aitseo-connect-setting
   configMapName: aitseo-connect-configmap
-  version: 1.0.10
+  version: 1.0.11
   author:
     name: AITSEO
     website: https://aitseo.com
-  logo: logo.png
+  logo: logo.svg
   homepage: https://aitseo.com
   repo: https://github.com/nevaraeo/halo-aitseo
   issues: https://github.com/nevaraeo/halo-aitseo/issues
