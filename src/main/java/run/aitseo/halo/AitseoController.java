@@ -134,8 +134,10 @@ public class AitseoController {
     }
 
     private Mono<Map<String, Object>> doInitKey(ConfigMap cm) {
-        // 已有 key 时直接覆盖生成新 key (rotate). 用户每次点「申请密钥」拿新 key,
-        // 老 key 立即失效 — 比 409 阻塞 UX 好.
+        // 已有 key 时返 409 拒绝 — 防未授权 rotate. 用户如要 reset, 必须先去
+        // Halo 后台 (需 admin 登录) 手动清空 connectionKey 字段保存后, 才能再
+        // 调本 endpoint. 这就把权限锚定在 Halo admin 上, 单凭知道 Halo URL
+        // 攻击者拿不到 key.
         Map<String, String> data = cm.getData();
         if (data == null) data = new HashMap<>();
         String basicJson = data.getOrDefault("basic", "{}");
@@ -145,8 +147,12 @@ public class AitseoController {
         } catch (Exception e) {
             basic = objectMapper.createObjectNode();
         }
-        boolean isRotation = basic.hasNonNull("connectionKey")
-            && !basic.get("connectionKey").asText().isBlank();
+        String existing = basic.hasNonNull("connectionKey")
+            ? basic.get("connectionKey").asText() : "";
+        if (existing != null && !existing.isBlank()) {
+            return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
+                "Connection key already set. To rotate: log into Halo admin, go to Plugins -> AITSEO Connect -> Settings, clear the Connection Key field, save, then call this endpoint again."));
+        }
         String newKey = "swc_" + randomHex(32);
         basic.put("connectionKey", newKey);
         try {
@@ -160,7 +166,6 @@ public class AitseoController {
             resp.put("ok", true);
             resp.put("connection_key", key);
             resp.put("generated", true);
-            resp.put("rotated", isRotation);
             return resp;
         });
     }

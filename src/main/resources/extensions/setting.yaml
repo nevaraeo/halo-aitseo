@@ -9,13 +9,13 @@ spec:
       formSchema:
         - $formkit: text
           name: connectionKey
-          label: 连接密钥 (Connection Key, 只读)
+          label: 连接密钥 (Connection Key)
           help: |
-            ⚠️ 此密钥由 AITSEO dashboard 自动申请生成, 不要在此处手动编辑.
-            到 AITSEO dashboard → 平台绑定 → Halo 卡片, 填站点地址后点
-            「自动申请密钥」按钮即可生成. 该字段仅用于显示, 修改无效.
+            ⚠️ 此密钥由 AITSEO dashboard「自动申请密钥」按钮生成, 通常不要手动编辑.
+            但如果你弄丢了原 key 想重新生成: 把本字段清空 → 保存 → 回 AITSEO dashboard
+            点「自动申请密钥」, 会自动生成新 key. 这是设计上的恢复机制 (要 Halo
+            admin 权限才能清空, 防止外人篡改).
           placeholder: "(尚未生成, 去 AITSEO dashboard 申请)"
-          disabled: true
         - $formkit: text
           name: publishOwner
           label: 文章作者 username
