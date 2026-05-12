@@ -1,8 +1,11 @@
-# ConfigMap 只声明 shell, 不预设 data —— Halo 升级时不会覆盖
-# 用户已保存的 connectionKey. Plugin.start() 全权负责:
-#   - ConfigMap 首次出现时 data 是 null/{} -> Plugin.start 写入 basic.connectionKey
-#   - 后续升级时 data 已有用户的 key -> Plugin.start 检测到非空就不动
+# ConfigMap 只声明 shell + 空 data —— Halo 升级时不会覆盖用户已保存的
+# connectionKey. Plugin.start() 检测 data 为空就生成新 key 写回, 检测到
+# 已有 key 就保留.
+#
+# 注: 必须给 data 至少一个空对象 {}, Halo 2.24+ 在内部 forEach data 时
+# 不允许 null, 否则 NPE: Cannot invoke "Map.forEach(...)" because "map" is null
 apiVersion: v1alpha1
 kind: ConfigMap
 metadata:
   name: aitseo-connect-configmap
+data: {}
