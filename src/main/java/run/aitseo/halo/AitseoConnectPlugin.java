@@ -3,6 +3,7 @@ package run.aitseo.halo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
@@ -66,8 +67,18 @@ public class AitseoConnectPlugin extends BasePlugin {
      * update the ConfigMap.
      */
     private Mono<Void> ensureConnectionKey() {
-        return fetchConfigMapWithRetry()
-            .flatMap(this::generateKeyIfMissing)
+        // 启动后延迟 3s 避开 Halo 自身 apply extensions/*.yaml 导致的并发写;
+        // 整个 fetch+update 链包在 Mono.defer 里, 每次 retry 都重新 fetch
+        // 拿到最新版本号; OptimisticLockingFailure (Halo r2dbc 在 PluginStartedListener
+        // 期间并发改 ConfigMap version 引起) 时 retry 5 次每次 1s 间隔.
+        return Mono.delay(Duration.ofSeconds(3))
+            .then(Mono.defer(() -> fetchConfigMapWithRetry().flatMap(this::generateKeyIfMissing)))
+            .retryWhen(Retry.fixedDelay(5, Duration.ofSeconds(1))
+                .filter(t -> t instanceof OptimisticLockingFailureException
+                    || (t.getCause() != null && t.getCause() instanceof OptimisticLockingFailureException))
+                .doBeforeRetry(sig -> System.out.println(
+                    "[AITSEO Connect] ConfigMap version conflict, retry "
+                        + (sig.totalRetries() + 1) + "/5")))
             .onErrorResume(err -> {
                 System.err.println("[AITSEO Connect] ensureConnectionKey failed: " + err.getMessage());
                 return Mono.empty();
