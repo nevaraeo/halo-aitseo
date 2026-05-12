@@ -134,6 +134,8 @@ public class AitseoController {
     }
 
     private Mono<Map<String, Object>> doInitKey(ConfigMap cm) {
+        // 已有 key 时直接覆盖生成新 key (rotate). 用户每次点「申请密钥」拿新 key,
+        // 老 key 立即失效 — 比 409 阻塞 UX 好.
         Map<String, String> data = cm.getData();
         if (data == null) data = new HashMap<>();
         String basicJson = data.getOrDefault("basic", "{}");
@@ -143,12 +145,8 @@ public class AitseoController {
         } catch (Exception e) {
             basic = objectMapper.createObjectNode();
         }
-        String existing = basic.hasNonNull("connectionKey")
-            ? basic.get("connectionKey").asText() : "";
-        if (existing != null && !existing.isBlank()) {
-            return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
-                "Connection key already initialized. Look it up in Halo admin: Plugins > AITSEO Connect > Settings."));
-        }
+        boolean isRotation = basic.hasNonNull("connectionKey")
+            && !basic.get("connectionKey").asText().isBlank();
         String newKey = "swc_" + randomHex(32);
         basic.put("connectionKey", newKey);
         try {
@@ -162,6 +160,7 @@ public class AitseoController {
             resp.put("ok", true);
             resp.put("connection_key", key);
             resp.put("generated", true);
+            resp.put("rotated", isRotation);
             return resp;
         });
     }
