@@ -2,7 +2,7 @@
 # (Plugin REST endpoints under /aitseo-connect/api/v1alpha1/** bypass Halo
 # RBAC entirely via path prefix; this role is only used inside Halo admin UI
 # for permission scoping.)
-apiVersion: v1alpha2
+apiVersion: v1alpha1
 kind: Role
 metadata:
   name: role-template-aitseo-connect-manage
