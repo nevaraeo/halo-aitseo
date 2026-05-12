@@ -195,10 +195,12 @@ public class AitseoController {
                 Snapshot snapshot = new Snapshot();
                 Metadata snapMeta = new Metadata();
                 snapMeta.setName(snapshotName);
-                Map<String, String> snapLabels = new HashMap<>();
-                snapLabels.put("content.halo.run/base-snapshot", "true");
-                if (publish) snapLabels.put("content.halo.run/published", "true");
-                snapMeta.setLabels(snapLabels);
+                // Halo Snapshot.KEEP_RAW_ANNO -> ANNOTATION (not label) marks base snapshot:
+                // Snapshot.isBaseSnapshot() reads metadata.annotations["content.halo.run/keep-raw"]
+                // = "true" to know patches are full content, not JSON Patch diffs.
+                Map<String, String> snapAnnos = new HashMap<>();
+                snapAnnos.put("content.halo.run/keep-raw", "true");
+                snapMeta.setAnnotations(snapAnnos);
                 snapshot.setMetadata(snapMeta);
 
                 Ref subjectRef = new Ref();
