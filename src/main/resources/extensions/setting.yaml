@@ -10,7 +10,11 @@ spec:
         - $formkit: text
           name: connectionKey
           label: 连接密钥 (Connection Key)
-          help: "粘贴到 AITSEO dashboard 用于验证身份。留空时插件激活会自动生成。重新生成会失效旧的密钥。"
+          help: |
+            ⚠️ 必填. 自己生成一个 swc_ 开头的 32+ 字符字符串, 例如:
+            swc_aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899
+            把同一字符串复制到 AITSEO dashboard 的「Connection Key」字段, 两边一致就能验证连接.
+            (随机生成器: 命令行 `openssl rand -hex 32` 或在线 hex 生成器)
           placeholder: "swc_..."
           validation: "length:32"
         - $formkit: text
