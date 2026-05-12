@@ -195,6 +195,10 @@ public class AitseoController {
                 Snapshot snapshot = new Snapshot();
                 Metadata snapMeta = new Metadata();
                 snapMeta.setName(snapshotName);
+                Map<String, String> snapLabels = new HashMap<>();
+                snapLabels.put("content.halo.run/base-snapshot", "true");
+                if (publish) snapLabels.put("content.halo.run/published", "true");
+                snapMeta.setLabels(snapLabels);
                 snapshot.setMetadata(snapMeta);
 
                 Ref subjectRef = new Ref();
