@@ -1,6 +1,8 @@
 package run.aitseo.halo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -16,11 +18,14 @@ import run.halo.app.core.extension.content.Category;
 import run.halo.app.core.extension.content.Post;
 import run.halo.app.core.extension.content.Snapshot;
 import run.halo.app.core.extension.content.Tag;
+import run.halo.app.extension.ConfigMap;
 import run.halo.app.extension.Metadata;
 import run.halo.app.extension.Ref;
 import run.halo.app.extension.ReactiveExtensionClient;
 import run.halo.app.plugin.ReactiveSettingFetcher;
 
+import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -30,6 +35,7 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import reactor.util.retry.Retry;
 
 /**
  * AITSEO Connect — REST endpoints under /aitseo-connect/api/v1alpha1/
@@ -52,6 +58,8 @@ public class AitseoController {
     private final ReactiveExtensionClient client;
     private final ReactiveSettingFetcher settingFetcher;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private static final SecureRandom INIT_RNG = new SecureRandom();
+    private static final String CONFIGMAP_NAME = "aitseo-connect-configmap";
 
     @Autowired
     public AitseoController(ReactiveExtensionClient client, ReactiveSettingFetcher settingFetcher) {
@@ -81,6 +89,60 @@ public class AitseoController {
             }
             return Mono.empty();
         });
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // POST /init-key —— 首次设置 connection key 用. 不需要 X-Connection-Key
+    // (因为还没有). 已设过的话返回 409, 避免任意人能读取已有 key.
+    // ════════════════════════════════════════════════════════════════
+    @PostMapping("/init-key")
+    public Mono<Map<String, Object>> initKey() {
+        return client.fetch(ConfigMap.class, CONFIGMAP_NAME)
+            .flatMap(this::doInitKey)
+            .retryWhen(Retry.fixedDelay(3, Duration.ofMillis(500))
+                .filter(t -> t instanceof OptimisticLockingFailureException
+                    || (t.getCause() != null && t.getCause() instanceof OptimisticLockingFailureException)));
+    }
+
+    private Mono<Map<String, Object>> doInitKey(ConfigMap cm) {
+        Map<String, String> data = cm.getData();
+        if (data == null) data = new HashMap<>();
+        String basicJson = data.getOrDefault("basic", "{}");
+        ObjectNode basic;
+        try {
+            basic = (ObjectNode) objectMapper.readTree(basicJson);
+        } catch (Exception e) {
+            basic = objectMapper.createObjectNode();
+        }
+        String existing = basic.hasNonNull("connectionKey")
+            ? basic.get("connectionKey").asText() : "";
+        if (existing != null && !existing.isBlank()) {
+            return Mono.error(new ResponseStatusException(HttpStatus.CONFLICT,
+                "Connection key already initialized. Look it up in Halo admin: Plugins > AITSEO Connect > Settings."));
+        }
+        String newKey = "swc_" + randomHex(32);
+        basic.put("connectionKey", newKey);
+        try {
+            data.put("basic", objectMapper.writeValueAsString(basic));
+            cm.setData(data);
+        } catch (Exception e) {
+            return Mono.error(e);
+        }
+        return client.update(cm).thenReturn(newKey).map(key -> {
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("ok", true);
+            resp.put("connection_key", key);
+            resp.put("generated", true);
+            return resp;
+        });
+    }
+
+    private static String randomHex(int bytes) {
+        byte[] buf = new byte[bytes];
+        INIT_RNG.nextBytes(buf);
+        StringBuilder sb = new StringBuilder(bytes * 2);
+        for (byte b : buf) sb.append(String.format("%02x", b));
+        return sb.toString();
     }
 
     // ════════════════════════════════════════════════════════════════
